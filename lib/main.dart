@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'pages/grammar_list_page.dart';
+import 'pages/home_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,10 +13,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'English AI Assistant',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      home: const GrammarListPage(),
+      home: const HomePage(),
       debugShowCheckedModeBanner: false,
     );
   }
