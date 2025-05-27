@@ -13,16 +13,10 @@ A beautiful and intuitive Flutter mobile application designed to help users impr
 
 ### 📚 **Grammar Learning**
 - Interactive grammar lessons with real-world examples
-- **Conditionals**: Master third and mixed conditionals
-- **Adjectives**: Learn gradable and non-gradable adjectives
 - Step-by-step explanations and practice exercises
 
 ### 💬 **Common Expressions**
 - Learn essential English idioms and phrases
-- **"Hit the nail on the head"** - Express accuracy perfectly
-- **"Cut corners"** - Understand shortcuts and their consequences
-- **"Break the ice"** - Master conversation starters
-- **"Bite off more than you can chew"** - Learn about overcommitment
 - Real-world usage examples and context
 
 ### 🎯 **Key Benefits**
