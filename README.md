@@ -33,7 +33,7 @@ A beautiful and intuitive Flutter mobile application designed to help users impr
 ### See the English AI Assistant in Action!
 
 <video width="600" controls>
-  <source src="https://github.com/user-attachments/assets/1033c1f0-393a-44ac-a1f4-f389c58501c6" type="video/mp4">
+  <source src="video-01.mp4" type="video/mp4">
   Your browser does not support the video tag.
 </video>
 
