@@ -1,4 +1,4 @@
-# 🎓 English AI Assistant
+# 🎓 English AI Assistant (Voice + Text)
 
 > **Learn English with the power of AI - Your personal English learning companion**
 
