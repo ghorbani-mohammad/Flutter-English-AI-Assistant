@@ -32,10 +32,11 @@ A beautiful and intuitive Flutter mobile application designed to help users impr
 
 ### See the English AI Assistant in Action!
 
-<video width="600" controls>
-  <source src="video-01.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+
+
+https://github.com/user-attachments/assets/565d6167-e19c-4abf-aeff-8572f4ff13d8
+
+
 
 *Watch how the English AI Assistant helps you learn grammar and expressions through interactive voice and text conversations*
 
