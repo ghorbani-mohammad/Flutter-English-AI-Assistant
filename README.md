@@ -26,6 +26,21 @@ A beautiful and intuitive Flutter mobile application designed to help users impr
 - **Beautiful UI**: Modern design that makes learning enjoyable
 - **Offline Access**: Learn anywhere, anytime
 
+## 🎬 Demo Video
+
+<div align="center">
+
+### See the English AI Assistant in Action!
+
+<video width="600" controls>
+  <source src="video-01.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+*Watch how the English AI Assistant helps you learn grammar and expressions through interactive voice and text conversations*
+
+</div>
+
 ## 📱 Screenshots
 
 <div align="center">
