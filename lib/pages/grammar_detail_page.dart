@@ -7,7 +7,6 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../models/grammar.dart';
-import '../services/ai_service.dart';
 
 class GrammarDetailPage extends StatefulWidget {
   final Grammar grammar;
@@ -33,6 +32,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   List<ChatMessage> _messages = [];
   WebSocketChannel? _webSocketChannel;
   bool _isGrammarScrollable = false;
+  bool _isGrammarExpanded = true;
 
   @override
   void initState() {
@@ -131,27 +131,88 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     _scrollToBottom();
 
     try {
-      final response = await AIService.sendTextMessage(
-        text,
-        widget.grammar.id,
-        widget.grammar.title,
-      );
-      
-      setState(() {
-        _messages.add(ChatMessage(
-          text: response,
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-        _isLoading = false;
-      });
-      
-      _scrollToBottom();
+      await _connectTextWebSocket();
+      await _sendTextToWebSocket(text);
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       _showErrorSnackBar('Failed to send message: $e');
+    }
+  }
+
+  Future<void> _connectTextWebSocket() async {
+    try {
+      // Close existing connection if any
+      _webSocketChannel?.sink.close();
+      
+      _webSocketChannel = WebSocketChannel.connect(
+        Uri.parse('wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/'),
+      );
+
+      String currentResponse = '';
+      bool hasAddedResponseMessage = false;
+      
+      _webSocketChannel!.stream.listen(
+        (data) {
+          final response = json.decode(data);
+          
+          if (response['error'] == false && response['message'] == 'completed.') {
+            // Final completion message - just stop loading
+            setState(() {
+              _isLoading = false;
+            });
+          } else if (response['error'] == false && response['message'] != null) {
+            // Streaming response - accumulate the text
+            currentResponse += response['message'];
+            
+            setState(() {
+              if (!hasAddedResponseMessage) {
+                // Add the first response message
+                _messages.add(ChatMessage(
+                  text: currentResponse,
+                  isUser: false,
+                  timestamp: DateTime.now(),
+                ));
+                hasAddedResponseMessage = true;
+              } else {
+                // Update the last message with accumulated response
+                if (_messages.isNotEmpty && !_messages.last.isUser) {
+                  _messages.last = ChatMessage(
+                    text: currentResponse,
+                    isUser: false,
+                    timestamp: _messages.last.timestamp,
+                  );
+                }
+              }
+            });
+            _scrollToBottom();
+          }
+        },
+        onError: (error) {
+          setState(() {
+            _isLoading = false;
+          });
+          _showErrorSnackBar('WebSocket error: $error');
+        },
+        onDone: () {
+          setState(() {
+            _isLoading = false;
+          });
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to connect to WebSocket: $e');
+    }
+  }
+
+  Future<void> _sendTextToWebSocket(String message) async {
+    try {
+      _webSocketChannel!.sink.add(json.encode({
+        'data': message,
+      }));
+    } catch (e) {
+      throw Exception('Failed to send message to WebSocket: $e');
     }
   }
 
@@ -315,10 +376,13 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
         child: Column(
           children: [
             // Grammar content section
-            Container(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
               width: double.infinity,
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.4, // Max 40% of screen height
+                maxHeight: _isGrammarExpanded 
+                    ? MediaQuery.of(context).size.height * 0.4 
+                    : 80, // Collapsed height
               ),
               decoration: const BoxDecoration(
                 color: Colors.deepPurple,
@@ -329,60 +393,103 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
               ),
               child: Stack(
                 children: [
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    controller: _grammarScrollController,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.grammar.title,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                  if (_isGrammarExpanded)
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      controller: _grammarScrollController,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 40), // Space for collapse button
+                          Text(
+                            widget.grammar.title,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          widget.grammar.description.replaceAll(RegExp(r'\\r\\n|\r\n'), '\n'),
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white.withOpacity(0.9),
-                            height: 1.5,
+                          const SizedBox(height: 12),
+                          Text(
+                            widget.grammar.description.replaceAll(RegExp(r'\\r\\n|\r\n'), '\n'),
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white.withOpacity(0.9),
+                              height: 1.5,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.schedule,
-                                size: 16,
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Created: ${_formatDate(widget.grammar.createdAt)}',
-                                style: TextStyle(
-                                  fontSize: 12,
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.schedule,
+                                  size: 16,
                                   color: Colors.white.withOpacity(0.8),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Created: ${_formatDate(widget.grammar.createdAt)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withOpacity(0.8),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                        ],
+                      ),
+                    )
+                  else
+                    // Collapsed view
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
+                      child: Text(
+                        widget.grammar.title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  
+                  // Expand/Collapse button
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _isGrammarExpanded = !_isGrammarExpanded;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Icon(
+                          _isGrammarExpanded ? Icons.expand_less : Icons.expand_more,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
                     ),
                   ),
-                  // Scroll indicator for long content
-                  if (_isGrammarScrollable)
+                  
+                  // Scroll indicator for long content (only when expanded)
+                  if (_isGrammarScrollable && _isGrammarExpanded)
                     Positioned(
                       bottom: 8,
                       right: 8,
