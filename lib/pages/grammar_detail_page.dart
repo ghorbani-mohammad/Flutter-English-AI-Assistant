@@ -1,0 +1,676 @@
+import 'package:flutter/material.dart';
+import 'package:record/record.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
+import '../models/grammar.dart';
+import '../services/ai_service.dart';
+
+class GrammarDetailPage extends StatefulWidget {
+  final Grammar grammar;
+
+  const GrammarDetailPage({
+    super.key,
+    required this.grammar,
+  });
+
+  @override
+  State<GrammarDetailPage> createState() => _GrammarDetailPageState();
+}
+
+class _GrammarDetailPageState extends State<GrammarDetailPage> {
+  final TextEditingController _textController = TextEditingController();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final ScrollController _scrollController = ScrollController();
+  final ScrollController _grammarScrollController = ScrollController();
+  
+  bool _isRecording = false;
+  bool _isLoading = false;
+  String? _recordingPath;
+  List<ChatMessage> _messages = [];
+  WebSocketChannel? _webSocketChannel;
+  bool _isGrammarScrollable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _addSystemMessage();
+    _checkGrammarScrollable();
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _scrollController.dispose();
+    _grammarScrollController.dispose();
+    _audioRecorder.dispose();
+    _webSocketChannel?.sink.close();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Recheck scrollability when dependencies change (like screen rotation)
+    _checkGrammarScrollable();
+  }
+
+  void _addSystemMessage() {
+    setState(() {
+      _messages.add(ChatMessage(
+        text: 'Hi! I\'m here to help you with "${widget.grammar.title}". You can ask me questions about this grammar topic using text or voice. How can I assist you?',
+        isUser: false,
+        timestamp: DateTime.now(),
+      ));
+    });
+  }
+
+  Future<void> _requestPermissions() async {
+    await Permission.microphone.request();
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      await _requestPermissions();
+      
+      if (await _audioRecorder.hasPermission()) {
+        final directory = await getTemporaryDirectory();
+        final path = '${directory.path}/audio_${DateTime.now().millisecondsSinceEpoch}.wav';
+        
+        await _audioRecorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.wav,
+            sampleRate: 16000,
+            bitRate: 128000,
+          ),
+          path: path,
+        );
+        
+        setState(() {
+          _isRecording = true;
+          _recordingPath = path;
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to start recording: $e');
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+      });
+      
+      if (_recordingPath != null) {
+        await _sendVoiceMessage(_recordingPath!);
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to stop recording: $e');
+    }
+  }
+
+  Future<void> _sendTextMessage() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+
+    setState(() {
+      _messages.add(ChatMessage(
+        text: text,
+        isUser: true,
+        timestamp: DateTime.now(),
+      ));
+      _isLoading = true;
+    });
+
+    _textController.clear();
+    _scrollToBottom();
+
+    try {
+      final response = await AIService.sendTextMessage(
+        text,
+        widget.grammar.id,
+        widget.grammar.title,
+      );
+      
+      setState(() {
+        _messages.add(ChatMessage(
+          text: response,
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+        _isLoading = false;
+      });
+      
+      _scrollToBottom();
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorSnackBar('Failed to send message: $e');
+    }
+  }
+
+  Future<void> _sendVoiceMessage(String audioPath) async {
+    setState(() {
+      _messages.add(ChatMessage(
+        text: '🎤 Voice message',
+        isUser: true,
+        timestamp: DateTime.now(),
+        isVoice: true,
+      ));
+      _isLoading = true;
+    });
+
+    _scrollToBottom();
+
+    try {
+      await _connectWebSocket();
+      await _streamAudioFile(audioPath);
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorSnackBar('Failed to send voice message: $e');
+    }
+  }
+
+  Future<void> _connectWebSocket() async {
+    try {
+      _webSocketChannel = WebSocketChannel.connect(
+        Uri.parse('wss://english-assistant.m-gh.com/ws/grammar/${widget.grammar.id}/'),
+      );
+
+      _webSocketChannel!.stream.listen(
+        (data) {
+          final response = json.decode(data);
+          if (response['type'] == 'transcription' || response['type'] == 'response') {
+            setState(() {
+              _messages.add(ChatMessage(
+                text: response['content'],
+                isUser: false,
+                timestamp: DateTime.now(),
+              ));
+              _isLoading = false;
+            });
+            _scrollToBottom();
+          }
+        },
+        onError: (error) {
+          setState(() {
+            _isLoading = false;
+          });
+          _showErrorSnackBar('WebSocket error: $error');
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to connect to WebSocket: $e');
+    }
+  }
+
+  Future<void> _streamAudioFile(String audioPath) async {
+    try {
+      final file = File(audioPath);
+      final bytes = await file.readAsBytes();
+      
+      // Send audio data in chunks
+      const chunkSize = 1024;
+      for (int i = 0; i < bytes.length; i += chunkSize) {
+        final end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
+        final chunk = bytes.sublist(i, end);
+        
+        _webSocketChannel!.sink.add(json.encode({
+          'type': 'audio_chunk',
+          'data': base64Encode(chunk),
+          'grammar_id': widget.grammar.id,
+          'grammar_title': widget.grammar.title,
+        }));
+        
+        // Small delay to avoid overwhelming the server
+        await Future.delayed(const Duration(milliseconds: 10));
+      }
+      
+      // Send end signal
+      _webSocketChannel!.sink.add(json.encode({
+        'type': 'audio_end',
+        'grammar_id': widget.grammar.id,
+        'grammar_title': widget.grammar.title,
+      }));
+      
+    } catch (e) {
+      throw Exception('Failed to stream audio: $e');
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _scrollToBottomOnKeyboard() {
+    // Additional scroll when keyboard appears
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  void _checkGrammarScrollable() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_grammarScrollController.hasClients) {
+        setState(() {
+          _isGrammarScrollable = _grammarScrollController.position.maxScrollExtent > 0;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        title: Text(
+          'Grammar #${widget.grammar.id}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.deepPurple,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Grammar content section
+            Container(
+              width: double.infinity,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.4, // Max 40% of screen height
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.deepPurple,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
+              ),
+              child: Stack(
+                children: [
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    controller: _grammarScrollController,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.grammar.title,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.grammar.description.replaceAll(RegExp(r'\\r\\n|\r\n'), '\n'),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white.withOpacity(0.9),
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.schedule,
+                                size: 16,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Created: ${_formatDate(widget.grammar.createdAt)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Scroll indicator for long content
+                  if (_isGrammarScrollable)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.swipe_vertical,
+                              size: 12,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Scroll',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            
+            // Chat section
+            Expanded(
+              child: Column(
+                children: [
+                  // Chat messages
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                      itemCount: _messages.length + (_isLoading ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _messages.length && _isLoading) {
+                          return _buildLoadingMessage();
+                        }
+                        
+                        final message = _messages[index];
+                        return _buildMessageBubble(message);
+                      },
+                    ),
+                  ),
+                  
+                  // Input section
+                  Container(
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 16,
+                      bottom: MediaQuery.of(context).viewInsets.bottom > 0 ? 16 : 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 5,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            onTap: _scrollToBottomOnKeyboard,
+                            decoration: InputDecoration(
+                              hintText: 'Ask about this grammar topic...',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(25),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[100],
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                            ),
+                            maxLines: null,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendTextMessage(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _isRecording ? _stopRecording : _startRecording,
+                          child: Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: _isRecording ? Colors.red : Colors.deepPurple,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _isRecording ? Icons.stop : Icons.mic,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _sendTextMessage,
+                          child: Container(
+                            width: 50,
+                            height: 50,
+                            decoration: const BoxDecoration(
+                              color: Colors.deepPurple,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(ChatMessage message) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!message.isUser) ...[
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: Colors.deepPurple,
+              child: const Icon(
+                Icons.smart_toy,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: message.isUser ? Colors.deepPurple : Colors.grey[200],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (message.isVoice)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.mic,
+                          size: 16,
+                          color: message.isUser ? Colors.white : Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Voice message',
+                          style: TextStyle(
+                            color: message.isUser ? Colors.white : Colors.black87,
+                            fontSize: 14,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      message.text,
+                      style: TextStyle(
+                        color: message.isUser ? Colors.white : Colors.black87,
+                        fontSize: 16,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                      color: message.isUser ? Colors.white70 : Colors.grey[500],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (message.isUser) ...[
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: Colors.grey[300],
+              child: Icon(
+                Icons.person,
+                color: Colors.grey[600],
+                size: 16,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingMessage() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: Colors.deepPurple,
+            child: const Icon(
+              Icons.smart_toy,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[600]!),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Thinking...',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ChatMessage {
+  final String text;
+  final bool isUser;
+  final DateTime timestamp;
+  final bool isVoice;
+
+  ChatMessage({
+    required this.text,
+    required this.isUser,
+    required this.timestamp,
+    this.isVoice = false,
+  });
+} 

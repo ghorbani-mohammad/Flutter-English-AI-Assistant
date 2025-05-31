@@ -45,4 +45,9 @@ A beautiful and intuitive Flutter mobile application designed to help users impr
 
 *Learn common English idioms and expressions with practical examples*
 
+### AI Assistant Interaction
+<img src="screenshot-04.png" alt="AI Assistant Grammar Help" width="300">
+
+*Interactive voice and text chat with AI assistant for personalized English learning support*
+
 </div>
