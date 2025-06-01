@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'grammar_list_page.dart';
 import 'expression_list_page.dart';
+import '../constants.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -20,6 +21,21 @@ class HomePage extends StatelessWidget {
         backgroundColor: Colors.indigo,
         elevation: 0,
         centerTitle: true,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: Text(
+                AppConstants.appVersion,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
