@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../models/grammar.dart';
+import '../services/ai_service.dart';
 
 class GrammarDetailPage extends StatefulWidget {
   final Grammar grammar;
@@ -230,8 +231,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     _scrollToBottom();
 
     try {
-      await _connectWebSocket();
-      await _streamAudioFile(audioPath);
+      await _connectVoiceWebSocket();
+      await _sendAudioToWebSocket(audioPath);
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -240,23 +241,50 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     }
   }
 
-  Future<void> _connectWebSocket() async {
+  Future<void> _connectVoiceWebSocket() async {
     try {
+      // Close existing connection if any
+      _webSocketChannel?.sink.close();
+      
       _webSocketChannel = WebSocketChannel.connect(
-        Uri.parse('wss://english-assistant.m-gh.com/ws/grammar/${widget.grammar.id}/'),
+        Uri.parse('wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/'),
       );
 
+      String currentResponse = '';
+      bool hasAddedResponseMessage = false;
+      
       _webSocketChannel!.stream.listen(
         (data) {
           final response = json.decode(data);
-          if (response['type'] == 'transcription' || response['type'] == 'response') {
+          
+          if (response['error'] == false && response['message'] == 'completed.') {
+            // Final completion message - just stop loading
             setState(() {
-              _messages.add(ChatMessage(
-                text: response['content'],
-                isUser: false,
-                timestamp: DateTime.now(),
-              ));
               _isLoading = false;
+            });
+          } else if (response['error'] == false && response['message'] != null) {
+            // Streaming response - accumulate the text
+            currentResponse += response['message'];
+            
+            setState(() {
+              if (!hasAddedResponseMessage) {
+                // Add the first response message
+                _messages.add(ChatMessage(
+                  text: currentResponse,
+                  isUser: false,
+                  timestamp: DateTime.now(),
+                ));
+                hasAddedResponseMessage = true;
+              } else {
+                // Update the last message with accumulated response
+                if (_messages.isNotEmpty && !_messages.last.isUser) {
+                  _messages.last = ChatMessage(
+                    text: currentResponse,
+                    isUser: false,
+                    timestamp: _messages.last.timestamp,
+                  );
+                }
+              }
             });
             _scrollToBottom();
           }
@@ -267,43 +295,27 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
           });
           _showErrorSnackBar('WebSocket error: $error');
         },
+        onDone: () {
+          setState(() {
+            _isLoading = false;
+          });
+        },
       );
     } catch (e) {
       throw Exception('Failed to connect to WebSocket: $e');
     }
   }
 
-  Future<void> _streamAudioFile(String audioPath) async {
+  Future<void> _sendAudioToWebSocket(String audioPath) async {
     try {
       final file = File(audioPath);
-      final bytes = await file.readAsBytes();
+      final audioBytes = await file.readAsBytes();
       
-      // Send audio data in chunks
-      const chunkSize = 1024;
-      for (int i = 0; i < bytes.length; i += chunkSize) {
-        final end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
-        final chunk = bytes.sublist(i, end);
-        
-        _webSocketChannel!.sink.add(json.encode({
-          'type': 'audio_chunk',
-          'data': base64Encode(chunk),
-          'grammar_id': widget.grammar.id,
-          'grammar_title': widget.grammar.title,
-        }));
-        
-        // Small delay to avoid overwhelming the server
-        await Future.delayed(const Duration(milliseconds: 10));
-      }
-      
-      // Send end signal
       _webSocketChannel!.sink.add(json.encode({
-        'type': 'audio_end',
-        'grammar_id': widget.grammar.id,
-        'grammar_title': widget.grammar.title,
+        'audio': 'data:audio/wav;base64,${base64Encode(audioBytes)}',
       }));
-      
     } catch (e) {
-      throw Exception('Failed to stream audio: $e');
+      throw Exception('Failed to send audio to WebSocket: $e');
     }
   }
 
