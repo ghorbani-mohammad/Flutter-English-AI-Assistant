@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import '../models/grammar.dart';
 import '../services/ai_service.dart';
 
@@ -34,6 +35,10 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   WebSocketChannel? _webSocketChannel;
   bool _isGrammarScrollable = false;
   bool _isGrammarExpanded = true;
+  
+  // Recording duration tracking
+  Timer? _recordingTimer;
+  int _recordingDuration = 0; // in seconds
 
   @override
   void initState() {
@@ -49,6 +54,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     _grammarScrollController.dispose();
     _audioRecorder.dispose();
     _webSocketChannel?.sink.close();
+    _recordingTimer?.cancel();
     super.dispose();
   }
 
@@ -93,6 +99,14 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
         setState(() {
           _isRecording = true;
           _recordingPath = path;
+          _recordingDuration = 0;
+        });
+        
+        // Start the timer to track recording duration
+        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          setState(() {
+            _recordingDuration++;
+          });
         });
       }
     } catch (e) {
@@ -103,8 +117,11 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   Future<void> _stopRecording() async {
     try {
       await _audioRecorder.stop();
+      _recordingTimer?.cancel();
+      
       setState(() {
         _isRecording = false;
+        _recordingDuration = 0;
       });
       
       if (_recordingPath != null) {
@@ -367,6 +384,12 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     });
   }
 
+  String _formatRecordingDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -600,20 +623,50 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        // Recording button with duration display
                         GestureDetector(
                           onTap: _isRecording ? _stopRecording : _startRecording,
-                          child: Container(
-                            width: 50,
-                            height: 50,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: _isRecording ? 80 : 50,
+                            height: _isRecording ? 80 : 50,
                             decoration: BoxDecoration(
                               color: _isRecording ? Colors.red : Colors.deepPurple,
                               shape: BoxShape.circle,
+                              boxShadow: _isRecording ? [
+                                BoxShadow(
+                                  color: Colors.red.withOpacity(0.3),
+                                  spreadRadius: 2,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ] : [],
                             ),
-                            child: Icon(
-                              _isRecording ? Icons.stop : Icons.mic,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                            child: _isRecording 
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.stop,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _formatRecordingDuration(_recordingDuration),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Icon(
+                                  Icons.mic,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
                           ),
                         ),
                         const SizedBox(width: 8),
