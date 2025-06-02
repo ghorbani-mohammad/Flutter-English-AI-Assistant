@@ -28,7 +28,7 @@ if (constantsFile.exists()) {
 android {
     namespace = "com.example.flutter_english_ai_assistant"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

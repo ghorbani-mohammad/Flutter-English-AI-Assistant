@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:record/record.dart';
+import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -24,9 +24,11 @@ class GrammarDetailPage extends StatefulWidget {
 
 class _GrammarDetailPageState extends State<GrammarDetailPage> {
   final TextEditingController _textController = TextEditingController();
-  final AudioRecorder _audioRecorder = AudioRecorder();
   final ScrollController _scrollController = ScrollController();
   final ScrollController _grammarScrollController = ScrollController();
+  
+  // Audio waveforms controller
+  final RecorderController _recorderController = RecorderController();
   
   bool _isRecording = false;
   bool _isLoading = false;
@@ -35,16 +37,13 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   WebSocketChannel? _webSocketChannel;
   bool _isGrammarScrollable = false;
   bool _isGrammarExpanded = true;
-  
-  // Recording duration tracking
-  Timer? _recordingTimer;
-  int _recordingDuration = 0; // in seconds
 
   @override
   void initState() {
     super.initState();
     _addSystemMessage();
     _checkGrammarScrollable();
+    _initializeRecorder();
   }
 
   @override
@@ -52,9 +51,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     _textController.dispose();
     _scrollController.dispose();
     _grammarScrollController.dispose();
-    _audioRecorder.dispose();
+    _recorderController.dispose();
     _webSocketChannel?.sink.close();
-    _recordingTimer?.cancel();
     super.dispose();
   }
 
@@ -75,39 +73,29 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     });
   }
 
-  Future<void> _requestPermissions() async {
-    await Permission.microphone.request();
+  Future<void> _initializeRecorder() async {
+    await _recorderController.checkPermission();
   }
 
   Future<void> _startRecording() async {
     try {
-      await _requestPermissions();
-      
-      if (await _audioRecorder.hasPermission()) {
+      if (_recorderController.hasPermission) {
         final directory = await getTemporaryDirectory();
-        final path = '${directory.path}/audio_${DateTime.now().millisecondsSinceEpoch}.wav';
+        final path = '${directory.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
         
-        await _audioRecorder.start(
-          const RecordConfig(
-            encoder: AudioEncoder.wav,
-            sampleRate: 16000,
-            bitRate: 128000,
-          ),
-          path: path,
-        );
+        await _recorderController.record(path: path);
         
         setState(() {
           _isRecording = true;
           _recordingPath = path;
-          _recordingDuration = 0;
         });
-        
-        // Start the timer to track recording duration
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _recordingDuration++;
-          });
-        });
+      } else {
+        await _recorderController.checkPermission();
+        if (_recorderController.hasPermission) {
+          await _startRecording();
+        } else {
+          _showErrorSnackBar('Microphone permission is required');
+        }
       }
     } catch (e) {
       _showErrorSnackBar('Failed to start recording: $e');
@@ -116,16 +104,14 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
 
   Future<void> _stopRecording() async {
     try {
-      await _audioRecorder.stop();
-      _recordingTimer?.cancel();
+      final path = await _recorderController.stop();
       
       setState(() {
         _isRecording = false;
-        _recordingDuration = 0;
       });
       
-      if (_recordingPath != null) {
-        await _sendVoiceMessage(_recordingPath!);
+      if (path != null) {
+        await _sendVoiceMessage(path);
       }
     } catch (e) {
       _showErrorSnackBar('Failed to stop recording: $e');
@@ -384,12 +370,6 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     });
   }
 
-  String _formatRecordingDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -598,93 +578,184 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            onTap: _scrollToBottomOnKeyboard,
-                            decoration: InputDecoration(
-                              hintText: 'Ask about this grammar topic...',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(25),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor: Colors.grey[100],
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 12,
-                              ),
-                            ),
-                            maxLines: null,
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _sendTextMessage(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Recording button with duration display
-                        GestureDetector(
-                          onTap: _isRecording ? _stopRecording : _startRecording,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            width: _isRecording ? 80 : 50,
-                            height: _isRecording ? 80 : 50,
+                        // Waveform display when recording
+                        if (_isRecording) ...[
+                          Container(
+                            width: double.infinity,
+                            height: 80,
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: _isRecording ? Colors.red : Colors.deepPurple,
-                              shape: BoxShape.circle,
-                              boxShadow: _isRecording ? [
-                                BoxShadow(
-                                  color: Colors.red.withOpacity(0.3),
-                                  spreadRadius: 2,
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ] : [],
+                              color: Colors.deepPurple.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.deepPurple.withOpacity(0.3),
+                                width: 2,
+                              ),
                             ),
-                            child: _isRecording 
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                            child: Column(
+                              children: [
+                                Row(
                                   children: [
-                                    const Icon(
-                                      Icons.stop,
-                                      color: Colors.white,
-                                      size: 24,
+                                    Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: Colors.deepPurple,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.deepPurple.withOpacity(0.3),
+                                            spreadRadius: 2,
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _formatRecordingDuration(_recordingDuration),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Recording...',
+                                      style: TextStyle(
+                                        color: Colors.deepPurple,
                                         fontWeight: FontWeight.bold,
+                                        fontSize: 14,
                                       ),
                                     ),
                                   ],
-                                )
-                              : const Icon(
-                                  Icons.mic,
+                                ),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      // Bottom waveform (flipped)
+                                      Transform(
+                                        alignment: Alignment.center,
+                                        transform: Matrix4.rotationX(3.14159), // Flip vertically
+                                        child: AudioWaveforms(
+                                          recorderController: _recorderController,
+                                          size: Size(double.infinity, 20),
+                                          waveStyle: WaveStyle(
+                                            waveColor: Colors.deepPurple.withOpacity(0.8),
+                                            extendWaveform: true,
+                                            showMiddleLine: false,
+                                            waveThickness: 2.0,
+                                            spacing: 3,
+                                            scaleFactor: 25.0,
+                                          ),
+                                        ),
+                                      ),
+                                      // Top waveform (normal)
+                                      AudioWaveforms(
+                                        recorderController: _recorderController,
+                                        size: Size(double.infinity, 20),
+                                        waveStyle: WaveStyle(
+                                          waveColor: Colors.deepPurple,
+                                          extendWaveform: true,
+                                          showMiddleLine: false,
+                                          waveThickness: 2.0,
+                                          spacing: 3,
+                                          scaleFactor: 25.0,
+                                        ),
+                                      ),
+                                      // Center line
+                                      Container(
+                                        height: 1,
+                                        width: double.infinity,
+                                        color: Colors.deepPurple.withOpacity(0.3),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _textController,
+                                onTap: _scrollToBottomOnKeyboard,
+                                decoration: InputDecoration(
+                                  hintText: 'Ask about this grammar topic...',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(25),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.grey[100],
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                maxLines: null,
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (_) => _sendTextMessage(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Recording button with waveform feedback
+                            GestureDetector(
+                              onTap: _isRecording ? _stopRecording : _startRecording,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: _isRecording ? 60 : 50,
+                                height: _isRecording ? 60 : 50,
+                                decoration: BoxDecoration(
+                                  color: _isRecording ? const Color(0xFFE91E63) : Colors.deepPurple,
+                                  shape: BoxShape.circle,
+                                  boxShadow: _isRecording ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFE91E63).withOpacity(0.4),
+                                      spreadRadius: 3,
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.deepPurple.withOpacity(0.2),
+                                      spreadRadius: 1,
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ] : [
+                                    BoxShadow(
+                                      color: Colors.deepPurple.withOpacity(0.3),
+                                      spreadRadius: 1,
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  _isRecording ? Icons.stop : Icons.mic,
+                                  color: Colors.white,
+                                  size: _isRecording ? 30 : 24,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: _sendTextMessage,
+                              child: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: const BoxDecoration(
+                                  color: Colors.deepPurple,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.send,
                                   color: Colors.white,
                                   size: 24,
                                 ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: _sendTextMessage,
-                          child: Container(
-                            width: 50,
-                            height: 50,
-                            decoration: const BoxDecoration(
-                              color: Colors.deepPurple,
-                              shape: BoxShape.circle,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.send,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
