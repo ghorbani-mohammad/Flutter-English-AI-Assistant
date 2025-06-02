@@ -255,12 +255,27 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
 
       String currentResponse = '';
       bool hasAddedResponseMessage = false;
+      bool hasReceivedTranscript = false;
       
       _webSocketChannel!.stream.listen(
         (data) {
           final response = json.decode(data);
           
-          if (response['error'] == false && response['message'] == 'completed.') {
+          // Handle audio transcript first
+          if (response['error'] == false && response['audio_text'] != null && !hasReceivedTranscript) {
+            hasReceivedTranscript = true;
+            setState(() {
+              // Update the last voice message with the transcript
+              if (_messages.isNotEmpty && _messages.last.isUser && _messages.last.isVoice) {
+                _messages[_messages.length - 1] = ChatMessage(
+                  text: response['audio_text'],
+                  isUser: true,
+                  timestamp: _messages.last.timestamp,
+                  isVoice: true,
+                );
+              }
+            });
+          } else if (response['error'] == false && response['message'] == 'completed.') {
             // Final completion message - just stop loading
             setState(() {
               _isLoading = false;
@@ -798,23 +813,38 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (message.isVoice)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.mic,
-                          size: 16,
-                          color: message.isUser ? Colors.white : Colors.grey[600],
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.mic,
+                              size: 16,
+                              color: message.isUser ? Colors.white : Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Voice message',
+                              style: TextStyle(
+                                color: message.isUser ? Colors.white70 : Colors.grey[500],
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Voice message',
-                          style: TextStyle(
-                            color: message.isUser ? Colors.white : Colors.black87,
-                            fontSize: 14,
-                            fontStyle: FontStyle.italic,
+                        if (message.text != '🎤 Voice message') ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            message.text,
+                            style: TextStyle(
+                              color: message.isUser ? Colors.white : Colors.black87,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     )
                   else
