@@ -118,6 +118,27 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     }
   }
 
+  Future<void> _cancelRecording() async {
+    try {
+      await _recorderController.stop();
+      
+      setState(() {
+        _isRecording = false;
+      });
+      
+      // Clean up the recording file if it exists
+      if (_recordingPath != null) {
+        final file = File(_recordingPath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+        _recordingPath = null;
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to cancel recording: $e');
+    }
+  }
+
   Future<void> _sendTextMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
@@ -709,25 +730,25 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            // Recording button with waveform feedback
+                            // Recording/Cancel button
                             GestureDetector(
-                              onTap: _isRecording ? _stopRecording : _startRecording,
+                              onTap: _isRecording ? _cancelRecording : _startRecording,
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
                                 width: _isRecording ? 60 : 50,
                                 height: _isRecording ? 60 : 50,
                                 decoration: BoxDecoration(
-                                  color: _isRecording ? const Color(0xFFE91E63) : Colors.deepPurple,
+                                  color: _isRecording ? Colors.red : Colors.deepPurple,
                                   shape: BoxShape.circle,
                                   boxShadow: _isRecording ? [
                                     BoxShadow(
-                                      color: const Color(0xFFE91E63).withOpacity(0.4),
+                                      color: Colors.red.withOpacity(0.4),
                                       spreadRadius: 3,
                                       blurRadius: 10,
                                       offset: const Offset(0, 2),
                                     ),
                                     BoxShadow(
-                                      color: Colors.deepPurple.withOpacity(0.2),
+                                      color: Colors.red.withOpacity(0.2),
                                       spreadRadius: 1,
                                       blurRadius: 6,
                                       offset: const Offset(0, 1),
@@ -742,21 +763,38 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                                   ],
                                 ),
                                 child: Icon(
-                                  _isRecording ? Icons.stop : Icons.mic,
+                                  _isRecording ? Icons.close : Icons.mic,
                                   color: Colors.white,
                                   size: _isRecording ? 30 : 24,
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
+                            // Send button (changes to green when recording)
                             GestureDetector(
-                              onTap: _sendTextMessage,
-                              child: Container(
+                              onTap: _isRecording ? _stopRecording : _sendTextMessage,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
                                 width: 50,
                                 height: 50,
-                                decoration: const BoxDecoration(
-                                  color: Colors.deepPurple,
+                                decoration: BoxDecoration(
+                                  color: _isRecording ? Colors.green : Colors.deepPurple,
                                   shape: BoxShape.circle,
+                                  boxShadow: _isRecording ? [
+                                    BoxShadow(
+                                      color: Colors.green.withOpacity(0.3),
+                                      spreadRadius: 1,
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ] : [
+                                    BoxShadow(
+                                      color: Colors.deepPurple.withOpacity(0.3),
+                                      spreadRadius: 1,
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
                                 child: const Icon(
                                   Icons.send,
