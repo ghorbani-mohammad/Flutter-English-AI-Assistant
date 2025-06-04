@@ -35,7 +35,8 @@ A beautiful and intuitive Flutter mobile application designed to help users impr
 
 
 
-https://github.com/user-attachments/assets/e90ce9eb-393a-4e51-bebc-63d3e93927d0
+https://github.com/user-attachments/assets/d4f16570-f473-41ad-8b29-e2c44ce4ce72
+
 
 
 
