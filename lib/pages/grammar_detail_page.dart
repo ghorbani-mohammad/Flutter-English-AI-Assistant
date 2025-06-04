@@ -735,8 +735,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                               onTap: _isRecording ? _cancelRecording : _startRecording,
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
-                                width: _isRecording ? 60 : 50,
-                                height: _isRecording ? 60 : 50,
+                                width: _isRecording ? 50 : 50,
+                                height: _isRecording ? 50 : 50,
                                 decoration: BoxDecoration(
                                   color: _isRecording ? Colors.red : Colors.deepPurple,
                                   shape: BoxShape.circle,
@@ -765,7 +765,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                                 child: Icon(
                                   _isRecording ? Icons.close : Icons.mic,
                                   color: Colors.white,
-                                  size: _isRecording ? 30 : 24,
+                                  size: _isRecording ? 24 : 24,
                                 ),
                               ),
                             ),
@@ -775,17 +775,23 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                               onTap: _isRecording ? _stopRecording : _sendTextMessage,
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
-                                width: 50,
-                                height: 50,
+                                width: _isRecording ? 60 : 50,
+                                height: _isRecording ? 60 : 50,
                                 decoration: BoxDecoration(
                                   color: _isRecording ? Colors.green : Colors.deepPurple,
                                   shape: BoxShape.circle,
                                   boxShadow: _isRecording ? [
                                     BoxShadow(
-                                      color: Colors.green.withOpacity(0.3),
-                                      spreadRadius: 1,
-                                      blurRadius: 4,
+                                      color: Colors.green.withOpacity(0.4),
+                                      spreadRadius: 3,
+                                      blurRadius: 10,
                                       offset: const Offset(0, 2),
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.green.withOpacity(0.2),
+                                      spreadRadius: 1,
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 1),
                                     ),
                                   ] : [
                                     BoxShadow(
@@ -796,10 +802,10 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                                     ),
                                   ],
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.send,
                                   color: Colors.white,
-                                  size: 24,
+                                  size: _isRecording ? 30 : 24,
                                 ),
                               ),
                             ),
