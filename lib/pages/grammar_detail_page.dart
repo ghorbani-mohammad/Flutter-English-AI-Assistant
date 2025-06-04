@@ -150,12 +150,21 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       // Close existing connection if any
       _webSocketChannel?.sink.close();
       
+      // Add an initial empty response message
+      setState(() {
+        _messages.add(ChatMessage(
+          text: '',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      });
+      _scrollToBottom();
+      
       _webSocketChannel = WebSocketChannel.connect(
         Uri.parse('wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/'),
       );
 
       String currentResponse = '';
-      bool hasAddedResponseMessage = false;
       
       _webSocketChannel!.stream.listen(
         (data) {
@@ -171,23 +180,13 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
             currentResponse += response['message'];
             
             setState(() {
-              if (!hasAddedResponseMessage) {
-                // Add the first response message
-                _messages.add(ChatMessage(
+              // Update the last message with accumulated response
+              if (_messages.isNotEmpty && !_messages.last.isUser) {
+                _messages.last = ChatMessage(
                   text: currentResponse,
                   isUser: false,
-                  timestamp: DateTime.now(),
-                ));
-                hasAddedResponseMessage = true;
-              } else {
-                // Update the last message with accumulated response
-                if (_messages.isNotEmpty && !_messages.last.isUser) {
-                  _messages.last = ChatMessage(
-                    text: currentResponse,
-                    isUser: false,
-                    timestamp: _messages.last.timestamp,
-                  );
-                }
+                  timestamp: _messages.last.timestamp,
+                );
               }
             });
             _scrollToBottom();
@@ -249,12 +248,21 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       // Close existing connection if any
       _webSocketChannel?.sink.close();
       
+      // Add an initial empty response message
+      setState(() {
+        _messages.add(ChatMessage(
+          text: '',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      });
+      _scrollToBottom();
+      
       _webSocketChannel = WebSocketChannel.connect(
         Uri.parse('wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/'),
       );
 
       String currentResponse = '';
-      bool hasAddedResponseMessage = false;
       bool hasReceivedTranscript = false;
       
       _webSocketChannel!.stream.listen(
@@ -285,23 +293,13 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
             currentResponse += response['message'];
             
             setState(() {
-              if (!hasAddedResponseMessage) {
-                // Add the first response message
-                _messages.add(ChatMessage(
+              // Update the last message with accumulated response
+              if (_messages.isNotEmpty && !_messages.last.isUser) {
+                _messages.last = ChatMessage(
                   text: currentResponse,
                   isUser: false,
-                  timestamp: DateTime.now(),
-                ));
-                hasAddedResponseMessage = true;
-              } else {
-                // Update the last message with accumulated response
-                if (_messages.isNotEmpty && !_messages.last.isUser) {
-                  _messages.last = ChatMessage(
-                    text: currentResponse,
-                    isUser: false,
-                    timestamp: _messages.last.timestamp,
-                  );
-                }
+                  timestamp: _messages.last.timestamp,
+                );
               }
             });
             _scrollToBottom();
@@ -562,12 +560,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                     child: ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-                      itemCount: _messages.length + (_isLoading ? 1 : 0),
+                      itemCount: _messages.length,
                       itemBuilder: (context, index) {
-                        if (index == _messages.length && _isLoading) {
-                          return _buildLoadingMessage();
-                        }
-                        
                         final message = _messages[index];
                         return _buildMessageBubble(message);
                       },
@@ -847,6 +841,29 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                         ],
                       ],
                     )
+                  else if (!message.isUser && message.text.isEmpty)
+                    // Show loading indicator for empty AI responses
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[600]!),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Thinking...',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    )
                   else
                     Text(
                       message.text,
@@ -879,55 +896,6 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingMessage() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.deepPurple,
-            child: const Icon(
-              Icons.smart_toy,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[600]!),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Thinking...',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
