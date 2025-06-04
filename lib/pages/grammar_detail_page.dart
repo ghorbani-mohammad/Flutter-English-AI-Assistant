@@ -3,6 +3,7 @@ import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -876,13 +877,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                         ),
                         if (message.text != '🎤 Voice message') ...[
                           const SizedBox(height: 4),
-                          Text(
-                            message.text,
-                            style: TextStyle(
-                              color: message.isUser ? Colors.white : Colors.black87,
-                              fontSize: 16,
-                            ),
-                          ),
+                          _buildMessageContent(message),
                         ],
                       ],
                     )
@@ -910,13 +905,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                       ],
                     )
                   else
-                    Text(
-                      message.text,
-                      style: TextStyle(
-                        color: message.isUser ? Colors.white : Colors.black87,
-                        fontSize: 16,
-                      ),
-                    ),
+                    _buildMessageContent(message),
                   const SizedBox(height: 4),
                   Text(
                     '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
@@ -944,6 +933,53 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildMessageContent(ChatMessage message) {
+    if (message.isUser) {
+      // For user messages, use regular Text widget
+      return Text(
+        message.text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+        ),
+      );
+    } else {
+      // For AI responses, use Markdown widget
+      return MarkdownBody(
+        data: message.text,
+        selectable: true,
+        styleSheet: MarkdownStyleSheet(
+          p: const TextStyle(
+            color: Colors.black87,
+            fontSize: 16,
+            height: 1.4,
+          ),
+          strong: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+          em: const TextStyle(
+            fontStyle: FontStyle.italic,
+            color: Colors.black87,
+          ),
+          code: TextStyle(
+            backgroundColor: Colors.grey[100],
+            fontFamily: 'monospace',
+            fontSize: 14,
+            color: Colors.deepPurple,
+          ),
+          codeblockDecoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(4),
+          ),
+          listBullet: const TextStyle(
+            color: Colors.black87,
+          ),
+        ),
+      );
+    }
   }
 }
 

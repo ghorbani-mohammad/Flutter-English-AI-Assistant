@@ -1,5 +1,5 @@
 class AppConstants {
-  static const String appVersion = "v1.4.2";
+  static const String appVersion = "v1.4.3";
   static const String appName = "English AI Assistant";
   
   // Full app name with version
