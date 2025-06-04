@@ -248,22 +248,13 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       // Close existing connection if any
       _webSocketChannel?.sink.close();
       
-      // Add an initial empty response message
-      setState(() {
-        _messages.add(ChatMessage(
-          text: '',
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      });
-      _scrollToBottom();
-      
       _webSocketChannel = WebSocketChannel.connect(
         Uri.parse('wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/'),
       );
 
       String currentResponse = '';
       bool hasReceivedTranscript = false;
+      bool hasAddedResponseMessage = false;
       
       _webSocketChannel!.stream.listen(
         (data) {
@@ -293,13 +284,23 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
             currentResponse += response['message'];
             
             setState(() {
-              // Update the last message with accumulated response
-              if (_messages.isNotEmpty && !_messages.last.isUser) {
-                _messages.last = ChatMessage(
+              if (!hasAddedResponseMessage) {
+                // Add the first response message when we start receiving AI response
+                _messages.add(ChatMessage(
                   text: currentResponse,
                   isUser: false,
-                  timestamp: _messages.last.timestamp,
-                );
+                  timestamp: DateTime.now(),
+                ));
+                hasAddedResponseMessage = true;
+              } else {
+                // Update the last message with accumulated response
+                if (_messages.isNotEmpty && !_messages.last.isUser) {
+                  _messages.last = ChatMessage(
+                    text: currentResponse,
+                    isUser: false,
+                    timestamp: _messages.last.timestamp,
+                  );
+                }
               }
             });
             _scrollToBottom();
