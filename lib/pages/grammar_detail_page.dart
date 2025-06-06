@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'dart:async';
 import '../models/grammar.dart';
 import '../services/ai_service.dart';
+import '../services/auth_service.dart';
 
 class GrammarDetailPage extends StatefulWidget {
   final Grammar grammar;
@@ -30,6 +31,9 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   
   // Audio waveforms controller
   final RecorderController _recorderController = RecorderController();
+  
+  // Auth service for JWT token
+  final AuthService _authService = AuthService();
   
   bool _isRecording = false;
   bool _isLoading = false;
@@ -182,8 +186,14 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       });
       _scrollToBottom();
       
+      // Get JWT token for authentication
+      final accessToken = await _authService.getAccessToken();
+      final wsUrl = accessToken != null 
+        ? 'wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/?token=$accessToken'
+        : 'wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/';
+      
       _webSocketChannel = WebSocketChannel.connect(
-        Uri.parse('wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/'),
+        Uri.parse(wsUrl),
       );
 
       String currentResponse = '';
@@ -270,8 +280,14 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       // Close existing connection if any
       _webSocketChannel?.sink.close();
       
+      // Get JWT token for authentication
+      final accessToken = await _authService.getAccessToken();
+      final wsUrl = accessToken != null 
+        ? 'wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/?token=$accessToken'
+        : 'wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/';
+      
       _webSocketChannel = WebSocketChannel.connect(
-        Uri.parse('wss://english-assistant.m-gh.com/chat/${widget.grammar.id}/'),
+        Uri.parse(wsUrl),
       );
 
       String currentResponse = '';

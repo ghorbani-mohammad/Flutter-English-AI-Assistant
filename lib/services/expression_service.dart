@@ -1,17 +1,15 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/expression.dart';
+import 'auth_service.dart';
 
 class ExpressionService {
-  static const String baseUrl = 'https://english-assistant.m-gh.com/api/v1/exp';
+  final AuthService _authService = AuthService();
 
-  static Future<ExpressionResponse> getExpressions() async {
+  Future<ExpressionResponse> getExpressions() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/expression/'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      final response = await _authService.authenticatedRequest(
+        method: 'GET',
+        endpoint: '/exp/expression/',
       );
 
       if (response.statusCode == 200) {

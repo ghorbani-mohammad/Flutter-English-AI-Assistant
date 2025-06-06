@@ -14,6 +14,7 @@ class _ExpressionListPageState extends State<ExpressionListPage> {
   List<Expression> expressions = [];
   bool isLoading = true;
   String? errorMessage;
+  final ExpressionService _expressionService = ExpressionService();
 
   @override
   void initState() {
@@ -28,7 +29,7 @@ class _ExpressionListPageState extends State<ExpressionListPage> {
         errorMessage = null;
       });
 
-      final expressionResponse = await ExpressionService.getExpressions();
+      final expressionResponse = await _expressionService.getExpressions();
       
       setState(() {
         expressions = expressionResponse.results;

@@ -1,17 +1,15 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/grammar.dart';
+import 'auth_service.dart';
 
 class GrammarService {
-  static const String baseUrl = 'https://english-assistant.m-gh.com/api/v1/gra';
+  final AuthService _authService = AuthService();
 
-  static Future<GrammarResponse> getGrammars() async {
+  Future<GrammarResponse> getGrammars() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/grammar/'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      final response = await _authService.authenticatedRequest(
+        method: 'GET',
+        endpoint: '/gra/grammar/',
       );
 
       if (response.statusCode == 200) {

@@ -1,27 +1,25 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http;
+import 'auth_service.dart';
 
 class AIService {
-  static const String baseUrl = 'https://english-assistant.m-gh.com/api/v1/gra';
+  final AuthService _authService = AuthService();
 
-  static Future<String> sendTextMessage(
+  Future<String> sendTextMessage(
     String message,
     int grammarId,
     String grammarTitle,
   ) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/chat/$grammarId/'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
+      final response = await _authService.authenticatedRequest(
+        method: 'POST',
+        endpoint: '/gra/chat/$grammarId/',
+        body: {
           'message': message,
           'grammar_id': grammarId,
           'grammar_title': grammarTitle,
           'type': 'text',
-        }),
+        },
       );
 
       if (response.statusCode == 200) {
@@ -35,23 +33,21 @@ class AIService {
     }
   }
 
-  static Future<String> sendVoiceMessage(
+  Future<String> sendVoiceMessage(
     Uint8List audioBytes,
     int grammarId,
     String grammarTitle,
   ) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/chat/$grammarId/'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
+      final response = await _authService.authenticatedRequest(
+        method: 'POST',
+        endpoint: '/gra/chat/$grammarId/',
+        body: {
           'audio': base64Encode(audioBytes),
           'grammar_id': grammarId,
           'grammar_title': grammarTitle,
           'type': 'voice',
-        }),
+        },
       );
 
       if (response.statusCode == 200) {

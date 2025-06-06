@@ -15,6 +15,7 @@ class _GrammarListPageState extends State<GrammarListPage> {
   List<Grammar> grammars = [];
   bool isLoading = true;
   String? errorMessage;
+  final GrammarService _grammarService = GrammarService();
 
   @override
   void initState() {
@@ -29,7 +30,7 @@ class _GrammarListPageState extends State<GrammarListPage> {
         errorMessage = null;
       });
 
-      final grammarResponse = await GrammarService.getGrammars();
+      final grammarResponse = await _grammarService.getGrammars();
       
       setState(() {
         grammars = grammarResponse.results;
