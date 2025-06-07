@@ -31,14 +31,20 @@ class AuthProvider with ChangeNotifier {
       if (isLoggedIn) {
         _user = await _authService.getStoredUser();
         
-        // Try to refresh token to ensure it's still valid
-        final refreshSuccess = await _authService.refreshToken();
-        if (refreshSuccess) {
+        // Check if current token is valid by making a light API call
+        final isTokenValid = await _authService.validateToken();
+        if (isTokenValid) {
           _authState = AuthState.authenticated;
         } else {
-          // Token refresh failed, user needs to login again
-          _authState = AuthState.unauthenticated;
-          _user = null;
+          // Token is invalid, try to refresh
+          final refreshSuccess = await _authService.refreshToken();
+          if (refreshSuccess) {
+            _authState = AuthState.authenticated;
+          } else {
+            // Token refresh failed, user needs to login again
+            _authState = AuthState.unauthenticated;
+            _user = null;
+          }
         }
       } else {
         _authState = AuthState.unauthenticated;

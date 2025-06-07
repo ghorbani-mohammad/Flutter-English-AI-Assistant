@@ -187,7 +187,7 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                     decoration: InputDecoration(
                       labelText: 'Verification Code',
-                      hintText: '000000',
+                      hintText: '------',
                       prefixIcon: const Icon(Icons.security),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),

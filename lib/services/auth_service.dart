@@ -9,6 +9,7 @@ class AuthService {
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userDataKey = 'user_data';
+  static const String _tokenExpiryKey = 'token_expiry';
 
   // Generate OTP
   Future<GenerateOtpResponse> generateOtp(String email) async {
@@ -125,6 +126,10 @@ class AuthService {
     await prefs.setString(_accessTokenKey, response.tokens.access);
     await prefs.setString(_refreshTokenKey, response.tokens.refresh);
     await prefs.setString(_userDataKey, jsonEncode(response.user.toJson()));
+    
+    // Store token expiry time (3 days from now as mentioned by user)
+    final expiryTime = DateTime.now().add(const Duration(days: 3));
+    await prefs.setString(_tokenExpiryKey, expiryTime.toIso8601String());
   }
 
   // Store tokens only
@@ -132,6 +137,10 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_accessTokenKey, accessToken);
     await prefs.setString(_refreshTokenKey, refreshToken);
+    
+    // Update token expiry time when refreshing (3 days from now)
+    final expiryTime = DateTime.now().add(const Duration(days: 3));
+    await prefs.setString(_tokenExpiryKey, expiryTime.toIso8601String());
   }
 
   // Get access token
@@ -166,12 +175,44 @@ class AuthService {
     return accessToken != null && refreshToken != null;
   }
 
+  // Validate current access token by checking expiry time locally
+  Future<bool> validateToken() async {
+    try {
+      final accessToken = await getAccessToken();
+      if (accessToken == null) {
+        return false;
+      }
+
+      // Check if we have stored expiry time
+      final prefs = await SharedPreferences.getInstance();
+      final expiryString = prefs.getString(_tokenExpiryKey);
+      
+      if (expiryString == null) {
+        // No expiry stored, assume token might be old, needs validation
+        return false;
+      }
+
+      final expiryTime = DateTime.parse(expiryString);
+      final now = DateTime.now();
+      
+      // Add a buffer of 5 minutes before actual expiry to be safe
+      final bufferTime = expiryTime.subtract(const Duration(minutes: 5));
+      
+      // If current time is before the buffer time, token is still valid
+      return now.isBefore(bufferTime);
+    } catch (e) {
+      // If there's an error parsing the date, assume token needs validation
+      return false;
+    }
+  }
+
   // Clear all authentication data
   Future<void> clearAuthData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_accessTokenKey);
     await prefs.remove(_refreshTokenKey);
     await prefs.remove(_userDataKey);
+    await prefs.remove(_tokenExpiryKey);
   }
 
   // Logout

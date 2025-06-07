@@ -11,6 +11,9 @@ import 'dart:async';
 import '../models/grammar.dart';
 import '../services/ai_service.dart';
 import '../services/auth_service.dart';
+import '../services/chat_history_service.dart';
+import '../models/chat_history.dart';
+import 'chat_history_page.dart';
 
 class GrammarDetailPage extends StatefulWidget {
   final Grammar grammar;
@@ -35,6 +38,9 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   // Auth service for JWT token
   final AuthService _authService = AuthService();
   
+  // Chat history service for infinite scroll
+  final ChatHistoryService _chatHistoryService = ChatHistoryService();
+  
   bool _isRecording = false;
   bool _isLoading = false;
   String? _recordingPath;
@@ -42,6 +48,13 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   WebSocketChannel? _webSocketChannel;
   bool _isGrammarScrollable = false;
   bool _isGrammarExpanded = true;
+  
+  // Infinite scroll state variables
+  bool _isLoadingHistory = false;
+  bool _hasMoreHistory = false;
+  int _currentHistoryPage = 1;
+  List<ChatHistoryMessage> _historyMessages = [];
+  bool _hasCheckedInitialHistory = false;
 
   @override
   void initState() {
@@ -49,6 +62,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     _addSystemMessage();
     _checkGrammarScrollable();
     _initializeRecorder();
+    _setupScrollListener();
+    _checkForInitialHistory();
   }
 
   @override
@@ -378,8 +393,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          0,                                 // 👈 top of reversed list
+          duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
       }
@@ -422,6 +437,96 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     });
   }
 
+  void _setupScrollListener() {
+    _scrollController.addListener(() {
+      // Load more history when scrolled to the bottom (which is now the top due to reverse:true)
+      final double maxScrollExtent = _scrollController.position.maxScrollExtent;
+      if (_scrollController.position.pixels >= maxScrollExtent - 50 && _hasMoreHistory && !_isLoadingHistory && _currentHistoryPage > 1) {
+        _loadMoreHistory();
+      }
+    });
+  }
+
+  Future<void> _loadMoreHistory() async {
+    if (_isLoadingHistory) return;
+    setState(() => _isLoadingHistory = true);
+
+    try {
+      final response = await _chatHistoryService.getChatHistory(
+          grammarId: widget.grammar.id,
+          page: _currentHistoryPage,
+          pageSize: 5);
+
+      if (response.results.isNotEmpty) {
+        // convert & APPEND (because reverse:true)
+        final older = response.results      // oldest->newest
+            .map(_toChatMessage)            //  ChatHistory → ChatMessage
+            .toList()
+            .reversed                        // newest->oldest
+            .toList();
+
+        setState(() {
+          // Remove the initial system message when loading history for the first time
+          if (_currentHistoryPage == 1 && _messages.isNotEmpty && 
+              !_messages[0].isUser && 
+              _messages[0].text.startsWith('Hi! I\'m here to help you with')) {
+            _messages.removeAt(0);
+          }
+          
+          _messages.addAll(older);          // 👈 no insert(0,…)
+          _currentHistoryPage++;
+          _hasMoreHistory = response.next != null;
+        });
+      } else {
+        setState(() => _hasMoreHistory = false);
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to load history: $e');
+    } finally {
+      setState(() => _isLoadingHistory = false);
+    }
+  }
+
+  Future<void> _checkForInitialHistory() async {
+    if (_hasCheckedInitialHistory) return;
+
+    setState(() {
+      _isLoadingHistory = true;
+    });
+
+    try {
+      final response = await _chatHistoryService.getChatHistory(
+        grammarId: widget.grammar.id,
+        page: 1,
+        pageSize: 1, // Just check if there's any history
+      );
+
+      setState(() {
+        _hasMoreHistory = response.results.isNotEmpty;
+        _hasCheckedInitialHistory = true;
+      });
+    } catch (e) {
+      // If there's an error, assume no history
+      setState(() {
+        _hasMoreHistory = false;
+        _hasCheckedInitialHistory = true;
+      });
+    } finally {
+      setState(() {
+        _isLoadingHistory = false;
+      });
+    }
+  }
+
+  ChatMessage _toChatMessage(dynamic historyMessage) {
+    return ChatMessage(
+      text: historyMessage.displayContent,
+      isUser: historyMessage.isUser,
+      timestamp: historyMessage.createdAt,
+      isVoice: historyMessage.isAudioMessage,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -438,6 +543,22 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
         backgroundColor: Colors.deepPurple,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatHistoryPage(
+                    grammar: widget.grammar,
+                  ),
+                ),
+              );
+            },
+            tooltip: 'Chat History',
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -596,14 +717,39 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                 children: [
                   // Chat messages
                   Expanded(
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) {
-                        final message = _messages[index];
-                        return _buildMessageBubble(message);
-                      },
+                    child: Column(
+                      children: [
+                        // Loading indicator for history - separate from the main list
+                        if (_isLoadingHistory && _currentHistoryPage > 1)
+                          _buildHistoryLoadingIndicator(),
+                        
+                        // Load previous chat button - separate from the main list
+                        if (_hasMoreHistory && _hasCheckedInitialHistory && _currentHistoryPage == 1)
+                          _buildLoadPreviousChatIndicator(isLoading: _isLoadingHistory),
+                        
+                        // Main chat messages list
+                        Expanded(
+                          child: ListView.builder(
+                            reverse: true,                         // 👈 important
+                            controller: _scrollController,
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                            itemCount: _messages.length,
+                            itemBuilder: (context, index) {
+                              // because the list is reversed we show newest->oldest = end->start
+                              final message = _messages[_messages.length - 1 - index];
+
+                              // -----------------------------------------
+                              // 2. give each bubble a stable ValueKey
+                              //    (timestamp or server id – anything unique & immutable)
+                              // -----------------------------------------
+                              return KeyedSubtree(
+                                key: ValueKey(message.timestamp.millisecondsSinceEpoch),
+                                child: _buildMessageBubble(message),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   
@@ -835,6 +981,114 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryLoadingIndicator() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.deepPurple.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Loading previous messages...',
+            style: TextStyle(
+              color: Colors.deepPurple,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadPreviousChatIndicator({bool isLoading = false}) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: InkWell(
+        onTap: isLoading ? null : () => _loadMoreHistory(),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.deepPurple.withOpacity(isLoading ? 0.05 : 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.deepPurple.withOpacity(isLoading ? 0.2 : 0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isLoading) ...[
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Loading previous conversations...',
+                  style: TextStyle(
+                    color: Colors.deepPurple.withOpacity(0.7),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ] else ...[
+                Icon(
+                  Icons.history,
+                  size: 18,
+                  color: Colors.deepPurple,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Load previous conversations',
+                  style: TextStyle(
+                    color: Colors.deepPurple,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.keyboard_arrow_up,
+                  size: 18,
+                  color: Colors.deepPurple,
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
