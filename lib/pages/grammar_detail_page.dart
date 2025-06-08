@@ -31,6 +31,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ScrollController _grammarScrollController = ScrollController();
+  final GlobalKey _inputKey = GlobalKey();
   
   // Audio waveforms controller
   final RecorderController _recorderController = RecorderController();
@@ -53,6 +54,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   bool _isLoadingHistory = false;
   bool _hasMoreHistory = false;
   int _currentHistoryPage = 1;
+  double _bottomPadding = 80.0; // Default padding
   List<ChatHistoryMessage> _historyMessages = [];
   bool _hasCheckedInitialHistory = false;
 
@@ -527,8 +529,27 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     );
   }
 
+  void _updateBottomPadding() {
+    final context = _inputKey.currentContext;
+    if (context != null) {
+      final size = context.size;
+      final newPadding = (size?.height ?? 0);
+      if (_bottomPadding != newPadding && newPadding > 0) {
+        // Use a post-frame callback to avoid calling setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _bottomPadding = newPadding;
+            });
+          }
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    _updateBottomPadding();
     return Scaffold(
       backgroundColor: Colors.grey[50],
       resizeToAvoidBottomInset: true,
@@ -660,6 +681,16 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                         setState(() {
                           _isGrammarExpanded = !_isGrammarExpanded;
                         });
+                        // Scroll to top of reversed list after collapsing/expanding
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (_scrollController.hasClients) {
+                            _scrollController.animateTo(
+                              0.0,
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeOut,
+                            );
+                          }
+                        });
                       },
                       child: Container(
                         padding: const EdgeInsets.all(8),
@@ -717,44 +748,51 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                 children: [
                   // Chat messages
                   Expanded(
-                    child: Column(
-                      children: [
-                        // Loading indicator for history - separate from the main list
-                        if (_isLoadingHistory && _currentHistoryPage > 1)
-                          _buildHistoryLoadingIndicator(),
+                    child: ListView.builder(
+                      primary: false,
+                      reverse: true,                         // 👈 important
+                      controller: _scrollController,
+                      padding: EdgeInsets.fromLTRB(16, _isGrammarExpanded ? 8 : 0, 16, _bottomPadding),
+                      itemCount: _messages.length +
+                          ((_hasMoreHistory &&
+                                  _hasCheckedInitialHistory &&
+                                  _currentHistoryPage == 1) ||
+                              (_isLoadingHistory && _currentHistoryPage > 1)
+                              ? 1
+                              : 0),
+                      itemBuilder: (context, index) {
+                        // The button/indicator is at the "end" of the list (top of the screen).
+                        if (index >= _messages.length) {
+                          if (_isLoadingHistory && _currentHistoryPage > 1) {
+                            return _buildHistoryLoadingIndicator();
+                          }
+                          if (_hasMoreHistory &&
+                              _hasCheckedInitialHistory &&
+                              _currentHistoryPage == 1) {
+                            return _buildLoadPreviousChatIndicator(
+                                isLoading: _isLoadingHistory);
+                          }
+                          return const SizedBox.shrink(); // Should not happen
+                        }
                         
-                        // Load previous chat button - separate from the main list
-                        if (_hasMoreHistory && _hasCheckedInitialHistory && _currentHistoryPage == 1)
-                          _buildLoadPreviousChatIndicator(isLoading: _isLoadingHistory),
-                        
-                        // Main chat messages list
-                        Expanded(
-                          child: ListView.builder(
-                            reverse: true,                         // 👈 important
-                            controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              // because the list is reversed we show newest->oldest = end->start
-                              final message = _messages[_messages.length - 1 - index];
+                        // because the list is reversed we show newest->oldest = end->start
+                        final message = _messages[_messages.length - 1 - index];
 
-                              // -----------------------------------------
-                              // 2. give each bubble a stable ValueKey
-                              //    (timestamp or server id – anything unique & immutable)
-                              // -----------------------------------------
-                              return KeyedSubtree(
-                                key: ValueKey(message.timestamp.millisecondsSinceEpoch),
-                                child: _buildMessageBubble(message),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                        // -----------------------------------------
+                        // 2. give each bubble a stable ValueKey
+                        //    (timestamp or server id – anything unique & immutable)
+                        // -----------------------------------------
+                        return KeyedSubtree(
+                          key: ValueKey(message.timestamp.millisecondsSinceEpoch),
+                          child: _buildMessageBubble(message),
+                        );
+                      },
                     ),
                   ),
                   
                   // Input section
                   Container(
+                    key: _inputKey,
                     padding: EdgeInsets.only(
                       left: 16,
                       right: 16,
@@ -1029,13 +1067,13 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeInOut,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: InkWell(
         onTap: isLoading ? null : () => _loadMoreHistory(),
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.deepPurple.withOpacity(isLoading ? 0.05 : 0.1),
             borderRadius: BorderRadius.circular(12),
@@ -1049,8 +1087,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
             children: [
               if (isLoading) ...[
                 SizedBox(
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
@@ -1061,14 +1099,14 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                   'Loading previous conversations...',
                   style: TextStyle(
                     color: Colors.deepPurple.withOpacity(0.7),
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ] else ...[
                 Icon(
                   Icons.history,
-                  size: 18,
+                  size: 16,
                   color: Colors.deepPurple,
                 ),
                 const SizedBox(width: 8),
@@ -1076,14 +1114,14 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                   'Load previous conversations',
                   style: TextStyle(
                     color: Colors.deepPurple,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Icon(
                   Icons.keyboard_arrow_up,
-                  size: 18,
+                  size: 16,
                   color: Colors.deepPurple,
                 ),
               ],
