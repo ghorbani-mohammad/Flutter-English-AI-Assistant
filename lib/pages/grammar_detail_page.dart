@@ -442,12 +442,11 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
   }
 
   void _setupScrollListener() {
+    // No longer loading history on scroll
+    // Simply monitor positioning for other UI needs if required
     _scrollController.addListener(() {
-      // Load more history when scrolled to the bottom (which is now the top due to reverse:true)
-      final double maxScrollExtent = _scrollController.position.maxScrollExtent;
-      if (_scrollController.position.pixels >= maxScrollExtent - 50 && _hasMoreHistory && !_isLoadingHistory && _currentHistoryPage > 1) {
-        _loadMoreHistory();
-      }
+      // Empty listener maintained for potential future use
+      // Auto-loading of history on scroll has been disabled
     });
   }
 
@@ -456,6 +455,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
     setState(() => _isLoadingHistory = true);
 
     try {
+      // Always load from page 1 when button is clicked (no auto-incrementation on scroll)
       final response = await _chatHistoryService.getChatHistory(
           grammarId: widget.grammar.id,
           page: _currentHistoryPage,
@@ -464,9 +464,9 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       if (response.results.isNotEmpty) {
         // convert & APPEND (because reverse:true)
         final older = response.results      // oldest->newest
-            .map(_toChatMessage)            //  ChatHistory → ChatMessage
+            .map(_toChatMessage)            // ChatHistory → ChatMessage
             .toList()
-            .reversed                        // newest->oldest
+            .reversed                       // newest->oldest
             .toList();
 
         setState(() {
@@ -477,9 +477,9 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
             _messages.removeAt(0);
           }
           
-          _messages.addAll(older);          // 👈 no insert(0,…)
-          _currentHistoryPage++;
-          _hasMoreHistory = response.next != null;
+          _messages.addAll(older);          // Add to the messages list
+          _currentHistoryPage++;            // Increment page counter for next load
+          _hasMoreHistory = response.next != null;  // Check if there are more messages
         });
       } else {
         setState(() => _hasMoreHistory = false);
@@ -756,23 +756,16 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                       controller: _scrollController,
                       padding: EdgeInsets.fromLTRB(16, _isGrammarExpanded ? 8 : 0, 16, _bottomPadding),
                       itemCount: _messages.length +
-                          ((_hasMoreHistory &&
-                                  _hasCheckedInitialHistory &&
-                                  _currentHistoryPage == 1) ||
-                              (_isLoadingHistory && _currentHistoryPage > 1)
-                              ? 1
-                              : 0),
+                          ((_hasMoreHistory && _hasCheckedInitialHistory) ? 1 : 0),
                       itemBuilder: (context, index) {
                         // The button/indicator is at the "end" of the list (top of the screen).
                         if (index >= _messages.length) {
-                          if (_isLoadingHistory && _currentHistoryPage > 1) {
+                          if (_isLoadingHistory) {
                             return const HistoryLoadingIndicator();
                           }
-                          if (_hasMoreHistory &&
-                              _hasCheckedInitialHistory &&
-                              _currentHistoryPage == 1) {
+                          if (_hasMoreHistory && _hasCheckedInitialHistory) {
                             return LoadPreviousChatIndicator(
-                              isLoading: _isLoadingHistory,
+                              isLoading: false,
                               onTap: _loadMoreHistory,
                             );
                           }
