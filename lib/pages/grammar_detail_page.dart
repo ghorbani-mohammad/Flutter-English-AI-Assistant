@@ -3,7 +3,6 @@ import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -12,8 +11,11 @@ import '../models/grammar.dart';
 import '../services/ai_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_history_service.dart';
-import '../models/chat_history.dart';
 import 'chat_history_page.dart';
+import '../models/chat_message.dart';
+import '../widgets/message_bubble.dart';
+import '../widgets/chat_indicators.dart';
+import '../models/chat_history.dart';
 
 class GrammarDetailPage extends StatefulWidget {
   final Grammar grammar;
@@ -764,13 +766,15 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                         // The button/indicator is at the "end" of the list (top of the screen).
                         if (index >= _messages.length) {
                           if (_isLoadingHistory && _currentHistoryPage > 1) {
-                            return _buildHistoryLoadingIndicator();
+                            return const HistoryLoadingIndicator();
                           }
                           if (_hasMoreHistory &&
                               _hasCheckedInitialHistory &&
                               _currentHistoryPage == 1) {
-                            return _buildLoadPreviousChatIndicator(
-                                isLoading: _isLoadingHistory);
+                            return LoadPreviousChatIndicator(
+                              isLoading: _isLoadingHistory,
+                              onTap: _loadMoreHistory,
+                            );
                           }
                           return const SizedBox.shrink(); // Should not happen
                         }
@@ -784,7 +788,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                         // -----------------------------------------
                         return KeyedSubtree(
                           key: ValueKey(message.timestamp.millisecondsSinceEpoch),
-                          child: _buildMessageBubble(message),
+                          child: MessageBubble(message: message),
                         );
                       },
                     ),
@@ -1023,284 +1027,4 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       ),
     );
   }
-
-  Widget _buildHistoryLoadingIndicator() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.deepPurple.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Loading previous messages...',
-            style: TextStyle(
-              color: Colors.deepPurple,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadPreviousChatIndicator({bool isLoading = false}) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: InkWell(
-        onTap: isLoading ? null : () => _loadMoreHistory(),
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.deepPurple.withOpacity(isLoading ? 0.05 : 0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.deepPurple.withOpacity(isLoading ? 0.2 : 0.3),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (isLoading) ...[
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Loading previous conversations...',
-                  style: TextStyle(
-                    color: Colors.deepPurple.withOpacity(0.7),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ] else ...[
-                Icon(
-                  Icons.history,
-                  size: 16,
-                  color: Colors.deepPurple,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Load previous conversations',
-                  style: TextStyle(
-                    color: Colors.deepPurple,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.keyboard_arrow_up,
-                  size: 16,
-                  color: Colors.deepPurple,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageBubble(ChatMessage message) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          if (!message.isUser) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.deepPurple,
-              child: const Icon(
-                Icons.smart_toy,
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: message.isUser ? Colors.deepPurple : Colors.grey[200],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (message.isVoice)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.mic,
-                              size: 16,
-                              color: message.isUser ? Colors.white : Colors.grey[600],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Voice message',
-                              style: TextStyle(
-                                color: message.isUser ? Colors.white70 : Colors.grey[500],
-                                fontSize: 12,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (message.text != '🎤 Voice message') ...[
-                          const SizedBox(height: 4),
-                          _buildMessageContent(message),
-                        ],
-                      ],
-                    )
-                  else if (!message.isUser && message.text.isEmpty)
-                    // Show loading indicator for empty AI responses
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[600]!),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Thinking...',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    _buildMessageContent(message),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      color: message.isUser ? Colors.white70 : Colors.grey[500],
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (message.isUser) ...[
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.grey[300],
-              child: Icon(
-                Icons.person,
-                color: Colors.grey[600],
-                size: 16,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageContent(ChatMessage message) {
-    if (message.isUser) {
-      // For user messages, use regular Text widget
-      return Text(
-        message.text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-        ),
-      );
-    } else {
-      // For AI responses, use Markdown widget
-      return MarkdownBody(
-        data: message.text,
-        selectable: true,
-        styleSheet: MarkdownStyleSheet(
-          p: const TextStyle(
-            color: Colors.black87,
-            fontSize: 16,
-            height: 1.4,
-          ),
-          strong: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-          em: const TextStyle(
-            fontStyle: FontStyle.italic,
-            color: Colors.black87,
-          ),
-          code: TextStyle(
-            backgroundColor: Colors.grey[100],
-            fontFamily: 'monospace',
-            fontSize: 14,
-            color: Colors.deepPurple,
-          ),
-          codeblockDecoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(4),
-          ),
-          listBullet: const TextStyle(
-            color: Colors.black87,
-          ),
-        ),
-      );
-    }
-  }
-}
-
-class ChatMessage {
-  final String text;
-  final bool isUser;
-  final DateTime timestamp;
-  final bool isVoice;
-
-  ChatMessage({
-    required this.text,
-    required this.isUser,
-    required this.timestamp,
-    this.isVoice = false,
-  });
 } 
