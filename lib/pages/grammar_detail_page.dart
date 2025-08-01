@@ -462,12 +462,14 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
           pageSize: 5);
 
       if (response.results.isNotEmpty) {
-        // convert & APPEND (because reverse:true)
-        final older = response.results      // oldest->newest
+        // Sort the response results by ID first to ensure correct order
+        final sortedResults = List<ChatHistoryMessage>.from(response.results);
+        sortedResults.sort((a, b) => a.id.compareTo(b.id));
+        
+        // convert historical messages (keep oldest->newest order for correct insertion)
+        final older = sortedResults         // oldest->newest (now properly sorted)
             .map(_toChatMessage)            // ChatHistory → ChatMessage
-            .toList()
-            .reversed                       // newest->oldest
-            .toList();
+            .toList();                      // Keep oldest->newest order
 
         setState(() {
           // Remove the initial system message when loading history for the first time
@@ -477,7 +479,9 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
             _messages.removeAt(0);
           }
           
-          _messages.addAll(older);          // Add to the messages list
+          // Insert historical messages at the beginning so they appear as older messages
+          // in the reversed ListView (older messages appear at the top when scrolling up)
+          _messages.insertAll(0, older);
           _currentHistoryPage++;            // Increment page counter for next load
           _hasMoreHistory = response.next != null;  // Check if there are more messages
         });
@@ -551,7 +555,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    _updateBottomPadding();
+    // Schedule the padding update for after the build completes
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateBottomPadding());
     return Scaffold(
       backgroundColor: Colors.grey[50],
       resizeToAvoidBottomInset: true,

@@ -80,6 +80,8 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
         } else {
           _messages.addAll(response.results);
         }
+        // Sort messages by ID to ensure correct order
+        _messages.sort((a, b) => a.id.compareTo(b.id));
         _hasMore = response.next != null;
         _isLoading = false;
       });
