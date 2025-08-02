@@ -760,6 +760,9 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                       reverse: true,                         // 👈 important
                       controller: _scrollController,
                       padding: EdgeInsets.fromLTRB(16, _isGrammarExpanded ? 8 : 0, 16, _bottomPadding),
+                      cacheExtent: 500,                      // 👈 Cache more items for smooth scrolling
+                      addRepaintBoundaries: true,            // 👈 Improve scroll performance
+                      physics: const ClampingScrollPhysics(), // 👈 Better scroll behavior
                       itemCount: _messages.length +
                           ((_hasMoreHistory && _hasCheckedInitialHistory) ? 1 : 0),
                       itemBuilder: (context, index) {
@@ -784,9 +787,11 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                         // 2. give each bubble a stable ValueKey
                         //    (timestamp or server id – anything unique & immutable)
                         // -----------------------------------------
-                        return KeyedSubtree(
-                          key: ValueKey(message.timestamp.millisecondsSinceEpoch),
-                          child: MessageBubble(message: message),
+                        return RepaintBoundary(
+                          child: KeyedSubtree(
+                            key: ValueKey('${message.timestamp.millisecondsSinceEpoch}_${message.isUser}'),
+                            child: MessageBubble(message: message),
+                          ),
                         );
                       },
                     ),

@@ -8,14 +8,45 @@ class MessageBubble extends StatelessWidget {
 
   const MessageBubble({super.key, required this.message});
 
+  // Static markdown style sheet to avoid recreation on every build
+  static final MarkdownStyleSheet _markdownStyleSheet = MarkdownStyleSheet(
+    p: const TextStyle(
+      color: Colors.black87,
+      fontSize: 16,
+      height: 1.4,
+    ),
+    strong: const TextStyle(
+      fontWeight: FontWeight.bold,
+      color: Colors.black87,
+    ),
+    em: const TextStyle(
+      fontStyle: FontStyle.italic,
+      color: Colors.black87,
+    ),
+    code: TextStyle(
+      backgroundColor: Colors.grey[100],
+      fontFamily: 'monospace',
+      fontSize: 14,
+      color: Colors.deepPurple,
+    ),
+    codeblockDecoration: BoxDecoration(
+      color: Colors.grey[100],
+      borderRadius: BorderRadius.circular(4),
+    ),
+    listBullet: const TextStyle(
+      color: Colors.black87,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment:
-            message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisAlignment:
+              message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
           if (!message.isUser) ...[
             CircleAvatar(
               radius: 16,
@@ -69,6 +100,7 @@ class MessageBubble extends StatelessWidget {
             ),
           ],
         ],
+        ),
       ),
     );
   }
@@ -87,34 +119,7 @@ class MessageBubble extends StatelessWidget {
     return MarkdownBody(
       data: message.text,
       selectable: true,
-      styleSheet: MarkdownStyleSheet(
-        p: const TextStyle(
-          color: Colors.black87,
-          fontSize: 16,
-          height: 1.4,
-        ),
-        strong: const TextStyle(
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
-        em: const TextStyle(
-          fontStyle: FontStyle.italic,
-          color: Colors.black87,
-        ),
-        code: TextStyle(
-          backgroundColor: Colors.grey[100],
-          fontFamily: 'monospace',
-          fontSize: 14,
-          color: Colors.deepPurple,
-        ),
-        codeblockDecoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(4),
-        ),
-        listBullet: const TextStyle(
-          color: Colors.black87,
-        ),
-      ),
+      styleSheet: _markdownStyleSheet, // Use the static style sheet
     );
   }
 }
