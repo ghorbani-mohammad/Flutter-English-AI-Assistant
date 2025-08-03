@@ -3,6 +3,8 @@ import 'dart:async';
 import '../models/grammar.dart';
 import '../models/chat_history.dart';
 import '../services/chat_history_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class ChatHistoryPage extends StatefulWidget {
   final Grammar grammar;
@@ -367,14 +369,30 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
           // Header with sender info and timestamp
           Row(
             children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: message.isUser ? Colors.blue : Colors.deepPurple,
-                child: Icon(
-                  message.isUser ? Icons.person : Icons.smart_toy,
-                  color: Colors.white,
-                  size: 16,
-                ),
+              Consumer<AuthProvider>(
+                builder: (context, authProvider, child) {
+                  final user = authProvider.user;
+                  return CircleAvatar(
+                    radius: 16,
+                    backgroundColor: message.isUser ? Colors.blue : Colors.deepPurple,
+                    backgroundImage: message.isUser && user?.profileImageUrl != null
+                        ? NetworkImage(user!.profileImageUrl!)
+                        : null,
+                    child: message.isUser
+                        ? (user?.profileImageUrl == null
+                            ? const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : null)
+                        : const Icon(
+                            Icons.smart_toy,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                  );
+                },
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -388,12 +406,17 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
                         fontSize: 14,
                       ),
                     ),
-                    Text(
-                      message.formattedDate,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
+                    Consumer<AuthProvider>(
+                      builder: (context, authProvider, child) {
+                        final userTimezone = authProvider.user?.timezone;
+                        return Text(
+                          message.getTimezoneAwareFormattedDateWithFallback(userTimezone),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

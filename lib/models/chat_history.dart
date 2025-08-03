@@ -1,3 +1,5 @@
+import '../utils/timezone_utils.dart';
+
 class ChatHistoryMessage {
   final int id;
   final String userName;
@@ -8,6 +10,7 @@ class ChatHistoryMessage {
   final double? audioDuration;
   final String formattedDate;
   final DateTime createdAt;
+  final String? userTimezone;
 
   ChatHistoryMessage({
     required this.id,
@@ -19,6 +22,7 @@ class ChatHistoryMessage {
     this.audioDuration,
     required this.formattedDate,
     required this.createdAt,
+    this.userTimezone,
   });
 
   factory ChatHistoryMessage.fromJson(Map<String, dynamic> json) {
@@ -32,6 +36,7 @@ class ChatHistoryMessage {
       audioDuration: json['audio_duration']?.toDouble(),
       formattedDate: json['formatted_date'],
       createdAt: DateTime.parse(json['created_at']),
+      userTimezone: json['user_timezone'],
     );
   }
 
@@ -46,6 +51,7 @@ class ChatHistoryMessage {
       'audio_duration': audioDuration,
       'formatted_date': formattedDate,
       'created_at': createdAt.toIso8601String(),
+      'user_timezone': userTimezone,
     };
   }
 
@@ -53,6 +59,19 @@ class ChatHistoryMessage {
   bool get isAi => senderType == 'ai';
   bool get isTextMessage => messageType == 'text';
   bool get isAudioMessage => messageType == 'audio';
+
+  /// Returns the formatted date in the user's timezone
+  String get timezoneAwareFormattedDate {
+    // If userTimezone is null, try to get the current user's timezone as fallback
+    // This will be handled in the UI layer where we have access to AuthProvider
+    return TimezoneUtils.getTimezoneAwareFormattedTime(createdAt, userTimezone, showDate: true);
+  }
+
+  /// Returns the formatted date in the user's timezone with fallback
+  String getTimezoneAwareFormattedDateWithFallback(String? fallbackTimezone) {
+    final effectiveTimezone = userTimezone ?? fallbackTimezone;
+    return TimezoneUtils.getTimezoneAwareFormattedTime(createdAt, effectiveTimezone, showDate: true);
+  }
 }
 
 class ChatHistoryResponse {

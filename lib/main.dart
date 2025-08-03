@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'widgets/app_wrapper.dart';
+import 'utils/timezone_utils.dart';
 
 void main() {
+  // Initialize timezone data
+  TimezoneUtils.initializeTimeZones();
   runApp(const MyApp());
 }
 

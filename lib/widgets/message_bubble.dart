@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-
+import 'package:provider/provider.dart';
 import '../models/chat_message.dart';
+import '../providers/auth_provider.dart';
 
 class MessageBubble extends StatelessWidget {
   final ChatMessage message;
@@ -77,7 +78,7 @@ class MessageBubble extends StatelessWidget {
                     _buildMessageContent(context),
                   const SizedBox(height: 4),
                   Text(
-                    '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                    message.timezoneAwareFormattedTime,
                     style: TextStyle(
                       color: message.isUser ? Colors.white70 : Colors.grey[500],
                       fontSize: 12,
@@ -89,14 +90,24 @@ class MessageBubble extends StatelessWidget {
           ),
           if (message.isUser) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.grey[300],
-              child: Icon(
-                Icons.person,
-                color: Colors.grey[600],
-                size: 16,
-              ),
+            Consumer<AuthProvider>(
+              builder: (context, authProvider, child) {
+                final user = authProvider.user;
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.grey[300],
+                  backgroundImage: user?.profileImageUrl != null
+                      ? NetworkImage(user!.profileImageUrl!)
+                      : null,
+                  child: user?.profileImageUrl == null
+                      ? Icon(
+                          Icons.person,
+                          color: Colors.grey[600],
+                          size: 16,
+                        )
+                      : null,
+                );
+              },
             ),
           ],
         ],

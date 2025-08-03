@@ -16,6 +16,8 @@ import '../models/chat_message.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_indicators.dart';
 import '../models/chat_history.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class GrammarDetailPage extends StatefulWidget {
   final Grammar grammar;
@@ -92,9 +94,19 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       _messages.add(ChatMessage(
         text: 'Hi! I\'m here to help you with "${widget.grammar.title}". You can ask me questions about this grammar topic using text or voice. How can I assist you?',
         isUser: false,
-        timestamp: DateTime.now(),
+        timestamp: DateTime.now().toUtc(),
+        userTimezone: _getUserTimezone(),
       ));
     });
+  }
+
+  String? _getUserTimezone() {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      return authProvider.user?.timezone;
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<void> _initializeRecorder() async {
@@ -171,7 +183,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       _messages.add(ChatMessage(
         text: text,
         isUser: true,
-        timestamp: DateTime.now(),
+        timestamp: DateTime.now().toUtc(),
+        userTimezone: _getUserTimezone(),
       ));
       _isLoading = true;
     });
@@ -200,7 +213,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
         _messages.add(ChatMessage(
           text: '',
           isUser: false,
-          timestamp: DateTime.now(),
+          timestamp: DateTime.now().toUtc(),
+          userTimezone: _getUserTimezone(),
         ));
       });
       _scrollToBottom();
@@ -237,6 +251,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                   text: currentResponse,
                   isUser: false,
                   timestamp: _messages.last.timestamp,
+                  userTimezone: _messages.last.userTimezone,
                 );
               }
             });
@@ -275,8 +290,9 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       _messages.add(ChatMessage(
         text: '🎤 Voice message',
         isUser: true,
-        timestamp: DateTime.now(),
+        timestamp: DateTime.now().toUtc(),
         isVoice: true,
+        userTimezone: _getUserTimezone(),
       ));
       _isLoading = true;
     });
@@ -328,6 +344,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                   isUser: true,
                   timestamp: _messages.last.timestamp,
                   isVoice: true,
+                  userTimezone: _messages.last.userTimezone,
                 );
               }
             });
@@ -346,7 +363,8 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                 _messages.add(ChatMessage(
                   text: currentResponse,
                   isUser: false,
-                  timestamp: DateTime.now(),
+                  timestamp: DateTime.now().toUtc(),
+                  userTimezone: _getUserTimezone(),
                 ));
                 hasAddedResponseMessage = true;
               } else {
@@ -356,6 +374,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
                     text: currentResponse,
                     isUser: false,
                     timestamp: _messages.last.timestamp,
+                    userTimezone: _messages.last.userTimezone,
                   );
                 }
               }
@@ -532,6 +551,7 @@ class _GrammarDetailPageState extends State<GrammarDetailPage> {
       isUser: historyMessage.isUser,
       timestamp: historyMessage.createdAt,
       isVoice: historyMessage.isAudioMessage,
+      userTimezone: historyMessage.userTimezone ?? _getUserTimezone(),
     );
   }
 

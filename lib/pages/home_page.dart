@@ -25,70 +25,80 @@ class HomePage extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.account_circle, color: Colors.white),
-            onSelected: (value) async {
-              if (value == 'logout') {
-                final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                await authProvider.logout();
-              } else if (value == 'profile') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProfilePage(),
-                  ),
-                );
-              }
-            },
-            itemBuilder: (context) {
-              final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          Consumer<AuthProvider>(
+            builder: (context, authProvider, child) {
               final user = authProvider.user;
-              
-              return [
-                PopupMenuItem<String>(
-                  enabled: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user?.fullName.isNotEmpty == true ? user!.fullName : 'User',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+              return PopupMenuButton<String>(
+                icon: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  backgroundImage: user?.profileImageUrl != null
+                      ? NetworkImage(user!.profileImageUrl!)
+                      : null,
+                  child: user?.profileImageUrl == null
+                      ? const Icon(Icons.account_circle, color: Colors.white)
+                      : null,
+                ),
+                onSelected: (value) async {
+                  if (value == 'logout') {
+                    await authProvider.logout();
+                  } else if (value == 'profile') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProfilePage(),
                       ),
-                      Text(
-                        user?.email ?? '',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                        ),
+                    );
+                  }
+                },
+                itemBuilder: (context) {
+                  return [
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user?.fullName.isNotEmpty == true ? user!.fullName : 'User',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Text(
+                            user?.email ?? '',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem<String>(
-                  value: 'profile',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person, color: Colors.indigo),
-                      SizedBox(width: 8),
-                      Text('Profile'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'logout',
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Logout'),
-                    ],
-                  ),
-                ),
-              ];
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem<String>(
+                      value: 'profile',
+                      child: Row(
+                        children: [
+                          Icon(Icons.person, color: Colors.indigo),
+                          SizedBox(width: 8),
+                          Text('Profile'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Logout'),
+                        ],
+                      ),
+                    ),
+                  ];
+                },
+              );
             },
           ),
           Padding(
