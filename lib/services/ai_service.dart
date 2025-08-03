@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'auth_service.dart';
+import '../models/user.dart';
 
 class AIService {
   final AuthService _authService = AuthService();
@@ -8,18 +9,26 @@ class AIService {
   Future<String> sendTextMessage(
     String message,
     int grammarId,
-    String grammarTitle,
-  ) async {
+    String grammarTitle, {
+    int? aiWordCountLimit,
+  }) async {
     try {
+      final body = {
+        'message': message,
+        'grammar_id': grammarId,
+        'grammar_title': grammarTitle,
+        'type': 'text',
+      };
+
+      // Add max words if provided
+      if (aiWordCountLimit != null && aiWordCountLimit > 0) {
+        body['ai_word_count_limit'] = aiWordCountLimit;
+      }
+
       final response = await _authService.authenticatedRequest(
         method: 'POST',
         endpoint: '/gra/chat/$grammarId/',
-        body: {
-          'message': message,
-          'grammar_id': grammarId,
-          'grammar_title': grammarTitle,
-          'type': 'text',
-        },
+        body: body,
       );
 
       if (response.statusCode == 200) {
@@ -36,18 +45,26 @@ class AIService {
   Future<String> sendVoiceMessage(
     Uint8List audioBytes,
     int grammarId,
-    String grammarTitle,
-  ) async {
+    String grammarTitle, {
+    int? aiWordCountLimit,
+  }) async {
     try {
+      final body = {
+        'audio': base64Encode(audioBytes),
+        'grammar_id': grammarId,
+        'grammar_title': grammarTitle,
+        'type': 'voice',
+      };
+
+      // Add max words if provided
+      if (aiWordCountLimit != null && aiWordCountLimit > 0) {
+        body['ai_word_count_limit'] = aiWordCountLimit;
+      }
+
       final response = await _authService.authenticatedRequest(
         method: 'POST',
         endpoint: '/gra/chat/$grammarId/',
-        body: {
-          'audio': base64Encode(audioBytes),
-          'grammar_id': grammarId,
-          'grammar_title': grammarTitle,
-          'type': 'voice',
-        },
+        body: body,
       );
 
       if (response.statusCode == 200) {
@@ -58,6 +75,16 @@ class AIService {
       }
     } catch (e) {
       throw Exception('Error sending voice message: $e');
+    }
+  }
+
+  // Get current user's max words preference
+  Future<int?> getUserMaxWords() async {
+    try {
+      final user = await _authService.getStoredUser();
+      return user?.aiWordCountLimit;
+    } catch (e) {
+      return null;
     }
   }
 } 

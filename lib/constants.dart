@@ -14,4 +14,5 @@ class AppConstants {
   static const String generateOtpEndpoint = "/usr/auth/generate-otp/";
   static const String verifyOtpEndpoint = "/usr/auth/verify-otp/";
   static const String refreshTokenEndpoint = "/usr/auth/token/refresh/";
+  static const String updateProfileEndpoint = "/usr/profile/";
 } 

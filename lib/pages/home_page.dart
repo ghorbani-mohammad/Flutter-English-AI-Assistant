@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'grammar_list_page.dart';
 import 'expression_list_page.dart';
+import 'profile_page.dart';
 import '../constants.dart';
 import '../providers/auth_provider.dart';
 
@@ -30,6 +31,13 @@ class HomePage extends StatelessWidget {
               if (value == 'logout') {
                 final authProvider = Provider.of<AuthProvider>(context, listen: false);
                 await authProvider.logout();
+              } else if (value == 'profile') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfilePage(),
+                  ),
+                );
               }
             },
             itemBuilder: (context) {
@@ -60,6 +68,16 @@ class HomePage extends StatelessWidget {
                   ),
                 ),
                 const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person, color: Colors.indigo),
+                      SizedBox(width: 8),
+                      Text('Profile'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem<String>(
                   value: 'logout',
                   child: Row(

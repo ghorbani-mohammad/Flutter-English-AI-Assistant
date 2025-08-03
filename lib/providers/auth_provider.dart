@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
@@ -34,11 +35,25 @@ class AuthProvider with ChangeNotifier {
         // Check if current token is valid by making a light API call
         final isTokenValid = await _authService.validateToken();
         if (isTokenValid) {
+          // Fetch current user profile to get latest data
+          try {
+            _user = await _authService.getCurrentUserProfile();
+          } catch (e) {
+            // If fetching profile fails, use stored user data
+            print('Failed to fetch current profile: $e');
+          }
           _authState = AuthState.authenticated;
         } else {
           // Token is invalid, try to refresh
           final refreshSuccess = await _authService.refreshToken();
           if (refreshSuccess) {
+            // Fetch current user profile after successful refresh
+            try {
+              _user = await _authService.getCurrentUserProfile();
+            } catch (e) {
+              // If fetching profile fails, use stored user data
+              print('Failed to fetch current profile after refresh: $e');
+            }
             _authState = AuthState.authenticated;
           } else {
             // Token refresh failed, user needs to login again
@@ -103,6 +118,59 @@ class AuthProvider with ChangeNotifier {
   // Clear error message
   void clearError() {
     _errorMessage = null;
+    notifyListeners();
+  }
+
+  // Refresh user profile data
+  Future<bool> refreshUserProfile() async {
+    try {
+      _errorMessage = null;
+      notifyListeners();
+
+      final updatedUser = await _authService.getCurrentUserProfile();
+      _user = updatedUser;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Update user profile
+  Future<bool> updateProfile({
+    String? firstName,
+    String? lastName,
+    int? aiWordCountLimit,
+    String? timezone,
+    File? imageFile,
+  }) async {
+    try {
+      _errorMessage = null;
+      notifyListeners();
+
+      final updatedUser = await _authService.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+        aiWordCountLimit: aiWordCountLimit,
+        timezone: timezone,
+        imageFile: imageFile,
+      );
+
+      _user = updatedUser;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Update local user data (for immediate UI updates)
+  void updateUserLocally(User updatedUser) {
+    _user = updatedUser;
     notifyListeners();
   }
 

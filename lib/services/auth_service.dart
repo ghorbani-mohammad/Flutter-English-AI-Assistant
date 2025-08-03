@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants.dart';
@@ -232,6 +233,114 @@ class AuthService {
     return {
       'Content-Type': 'application/json',
     };
+  }
+
+  // Get current user profile
+  Future<User> getCurrentUserProfile() async {
+    try {
+      final url = Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.updateProfileEndpoint}');
+      
+      final response = await authenticatedRequest(
+        method: 'GET',
+        endpoint: AppConstants.updateProfileEndpoint,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final user = User.fromJson(data);
+        
+        // Update stored user data
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_userDataKey, jsonEncode(user.toJson()));
+        
+        return user;
+      } else {
+        try {
+          final errorData = jsonDecode(response.body);
+          throw Exception(errorData['message'] ?? 'Failed to fetch profile');
+        } catch (e) {
+          throw Exception('HTTP ${response.statusCode}: ${response.body}');
+        }
+      }
+    } catch (e) {
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Failed to fetch profile: $e');
+    }
+  }
+
+  // Update user profile
+  Future<User> updateProfile({
+    String? firstName,
+    String? lastName,
+    int? aiWordCountLimit,
+    String? timezone,
+    File? imageFile,
+  }) async {
+    try {
+      final url = Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.updateProfileEndpoint}');
+      
+      // Create multipart request for file upload
+      var request = http.MultipartRequest('PUT', url);
+      
+      // Add authorization header
+      final authHeaders = await getAuthHeaders();
+      request.headers.addAll(authHeaders);
+      
+      // Add text fields
+      if (firstName != null) {
+        request.fields['first_name'] = firstName;
+      }
+      if (lastName != null) {
+        request.fields['last_name'] = lastName;
+      }
+      if (aiWordCountLimit != null) {
+        request.fields['ai_word_count_limit'] = aiWordCountLimit.toString();
+      }
+      if (timezone != null) {
+        request.fields['timezone'] = timezone;
+      }
+      
+      // Add image file if provided
+      if (imageFile != null) {
+        final stream = http.ByteStream(imageFile.openRead());
+        final length = await imageFile.length();
+        final multipartFile = http.MultipartFile(
+          'profile_image',
+          stream,
+          length,
+          filename: imageFile.path.split('/').last,
+        );
+        request.files.add(multipartFile);
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final updatedUser = User.fromJson(data);
+        
+        // Update stored user data
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_userDataKey, jsonEncode(updatedUser.toJson()));
+        
+        return updatedUser;
+      } else {
+        try {
+          final errorData = jsonDecode(response.body);
+          throw Exception(errorData['message'] ?? 'Failed to update profile');
+        } catch (e) {
+          throw Exception('HTTP ${response.statusCode}: ${response.body}');
+        }
+      }
+    } catch (e) {
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Failed to update profile: $e');
+    }
   }
 
   // Make authenticated request with automatic token refresh
