@@ -377,7 +377,9 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
                     backgroundColor: message.isUser ? Colors.blue : Colors.deepPurple,
                     backgroundImage: message.isUser && user?.profileImageUrl != null
                         ? NetworkImage(user!.profileImageUrl!)
-                        : null,
+                        : message.isUser
+                            ? null
+                            : const AssetImage('icon-06.webp'),
                     child: message.isUser
                         ? (user?.profileImageUrl == null
                             ? const Icon(
@@ -386,11 +388,7 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
                                 size: 16,
                               )
                             : null)
-                        : const Icon(
-                            Icons.smart_toy,
-                            color: Colors.white,
-                            size: 16,
-                          ),
+                        : null,
                   );
                 },
               ),

@@ -52,11 +52,8 @@ class MessageBubble extends StatelessWidget {
             CircleAvatar(
               radius: 16,
               backgroundColor: Colors.deepPurple,
-              child: const Icon(
-                Icons.smart_toy,
-                color: Colors.white,
-                size: 16,
-              ),
+              backgroundImage: const AssetImage('icon-06.webp'),
+              child: null,
             ),
             const SizedBox(width: 8),
           ],
