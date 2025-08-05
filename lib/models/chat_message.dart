@@ -17,6 +17,6 @@ class ChatMessage {
 
   /// Returns the formatted timestamp in the user's timezone
   String get timezoneAwareFormattedTime {
-    return TimezoneUtils.getTimezoneAwareFormattedTime(timestamp, userTimezone, showDate: false);
+    return TimezoneUtils.getTimezoneAwareFormattedTime(timestamp, userTimezone, showDate: true);
   }
 } 
